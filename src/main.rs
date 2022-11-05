@@ -42,5 +42,6 @@ fn main() -> ! {
     wdt0.disable();
     wdt1.disable();
 
+    esp_println::println!("Hello World\n");
     loop {}
 }
