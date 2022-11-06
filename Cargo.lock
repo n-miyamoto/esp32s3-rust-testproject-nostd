@@ -467,6 +467,7 @@ dependencies = [
 name = "test_esp32s3_nostd"
 version = "0.1.0"
 dependencies = [
+ "critical-section",
  "esp-alloc",
  "esp-backtrace",
  "esp-println 0.3.1",

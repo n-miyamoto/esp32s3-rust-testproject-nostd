@@ -17,6 +17,8 @@ esp-println = { version = "0.3.1", features = ["esp32s3"] }
 
 xtensa-lx-rt = { version = "0.13.0", features = ["esp32s3"], optional = true }
 
+critical-section = { version = "1.1.1"}
+
 [features]
 default = ["rt"]
 rt = ["xtensa-lx-rt"]

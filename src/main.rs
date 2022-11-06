@@ -1,9 +1,18 @@
 #![no_std]
 #![no_main]
 
+use core::cell::RefCell;
 extern crate alloc;
+use critical_section::Mutex;
 use esp32s3_hal::{
-    clock::ClockControl, pac::Peripherals, prelude::*, timer::TimerGroup, Delay, Rtc, IO,
+    clock::ClockControl,
+    gpio::Gpio0,
+    gpio_types::{Event, Input, Pin, PullUp},
+    interrupt,
+    pac::{self, Peripherals},
+    prelude::*,
+    timer::TimerGroup,
+    Delay, Rtc, IO,
 };
 use esp_backtrace as _;
 
@@ -28,6 +37,9 @@ fn init_heap() {
         ALLOCATOR.init(heap_start as *mut u8, HEAP_SIZE);
     }
 }
+
+static BUTTON: Mutex<RefCell<Option<Gpio0<Input<PullUp>>>>> = Mutex::new(RefCell::new(None));
+
 #[xtensa_lx_rt::entry]
 fn main() -> ! {
     let peripherals = Peripherals::take().unwrap();
@@ -41,29 +53,33 @@ fn main() -> ! {
     let timer_group1 = TimerGroup::new(peripherals.TIMG1, &clocks);
     let mut wdt1 = timer_group1.wdt;
 
+    rtc.swd.disable();
     rtc.rwdt.disable();
     wdt0.disable();
     wdt1.disable();
 
     esp_println::println!("Hello World\n");
 
-    // Set GPIO7 as an output, GPIO0 as input
+    // Set GPIO0 as input
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
-    let mut led = io.pins.gpio7.into_push_pull_output();
-    let button = io.pins.gpio0.into_pull_up_input();
+    let mut button = io.pins.gpio0.into_pull_up_input();
+    button.listen(Event::FallingEdge); // raise interrupt on falling edge
 
-    let mut st = button.is_high().unwrap();
-    let mut st_next;
-    loop {
-        st_next = button.is_high().unwrap();
-        if st != st_next {
-            led.set_high().unwrap();
-            if st_next {
-                esp_println::println!("button off\n");
-            } else {
-                esp_println::println!("button on\n");
-            }
-        }
-        st = st_next;
-    }
+    critical_section::with(|cs| BUTTON.borrow_ref_mut(cs).replace(button));
+
+    interrupt::enable(pac::Interrupt::GPIO, interrupt::Priority::Priority3).unwrap();
+
+    loop {}
+}
+
+#[interrupt]
+fn GPIO() {
+    critical_section::with(|cs| {
+        esp_println::println!("GPIO interrupt");
+        BUTTON
+            .borrow_ref_mut(cs)
+            .as_mut()
+            .unwrap()
+            .clear_interrupt();
+    });
 }
